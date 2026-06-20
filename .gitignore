@@ -1,0 +1,23 @@
+# Yandex AI Studio MCP Server — gitignore
+
+# Environment (REAL keys — NEVER commit)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Agent configs (may contain customer data)
+agents/*.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini

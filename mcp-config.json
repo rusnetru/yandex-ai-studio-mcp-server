@@ -1,0 +1,15 @@
+{
+  "name": "yandex-ai-studio",
+  "command": "python",
+  "args": [
+    "D:/MSP Servers/Yandex AI Studio MCP Server/server.py"
+  ],
+  "env": {
+    "YANDEX_FOLDER_ID": "",
+    "YANDEX_API_KEY": "",
+    "YANDEX_MODEL": "yandexgpt"
+  },
+  "timeout": 120,
+  "connect_timeout": 30,
+  "description": "MCP-сервер для Yandex Cloud AI Studio: YandexGPT, YandexART, SpeechKit, Embeddings, создание AI-агентов"
+}

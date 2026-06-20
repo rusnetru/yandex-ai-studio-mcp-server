@@ -1,0 +1,8 @@
+# MCP Framework
+mcp[cli]>=1.0.0
+
+# Yandex AI Studio SDK
+yandex-ai-studio-sdk>=0.20.0
+
+# Environment config
+python-dotenv>=1.0.0

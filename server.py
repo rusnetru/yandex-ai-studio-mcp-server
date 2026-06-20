@@ -70,6 +70,17 @@ def get_sdk() -> AIStudio:
     api_key = os.getenv("YANDEX_API_KEY", "").strip()
     iam_token = os.getenv("YANDEX_IAM_TOKEN", "").strip()
 
+    # Fallback: read from Андрей's key file if env is empty
+    if not api_key:
+        key_file = Path("D:/my_ai_agent/Yandex cloude api.txt")
+        if key_file.exists():
+            with open(key_file) as f:
+                for line in f:
+                    if "AQVN" in line:
+                        api_key = line.strip().split()[-1]
+                        logger.info("API key loaded from %s", key_file)
+                        break
+
     if not folder_id:
         raise RuntimeError(
             "YANDEX_FOLDER_ID не задан. Создайте .env в папке сервера:\n"

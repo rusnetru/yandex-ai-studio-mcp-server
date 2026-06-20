@@ -1,0 +1,46 @@
+{
+  "name": "LeadQualifier",
+  "model": "yandexgpt",
+  "temperature": 0.2,
+  "max_tokens": 800,
+  "system_prompt": "Ты — агент квалификации входящих заявок. Твоя задача — извлечь из обращения клиента структурированные данные и создать сделку в CRM.\n\nПравила:\n1. Извлеки: имя, телефон, email, компанию (если есть)\n2. Определи источник заявки (сайт, звонок, мессенджер)\n3. Оцени бюджет: точный (назвал сумму), ориентировочный (диапазон), не определён\n4. Определи срочность: высокая (нужно вчера), средняя (в течение недели), низкая (просто интересуется)\n5. Категоризируй запрос: консультация, покупка, поддержка, партнёрство, другое\n6. Сделай краткое резюме потребности (1-2 предложения)\n7. Создай сделку в CRM через create_crm_lead\n8. Если данных не хватает — задай уточняющие вопросы, не додумывай",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "create_crm_lead",
+        "description": "Создать сделку в CRM (amoCRM или Bitrix24)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string", "description": "Название сделки (формат: Имя — Категория запроса)"},
+            "price": {"type": "number", "description": "Бюджет (0 если не определён)"},
+            "contact_name": {"type": "string"},
+            "contact_phone": {"type": "string"},
+            "contact_email": {"type": "string"},
+            "company": {"type": "string"},
+            "source": {"type": "string", "description": "Источник: site, call, telegram, whatsapp, email"},
+            "urgency": {"type": "string", "enum": ["high", "medium", "low"]},
+            "category": {"type": "string", "enum": ["consultation", "purchase", "support", "partnership", "other"]},
+            "summary": {"type": "string", "description": "Краткое описание потребности"}
+          },
+          "required": ["name", "contact_phone"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_crm_duplicates",
+        "description": "Проверить, нет ли уже контакта/сделки в CRM",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "phone": {"type": "string"},
+            "email": {"type": "string"}
+          }
+        }
+      }
+    }
+  ]
+}

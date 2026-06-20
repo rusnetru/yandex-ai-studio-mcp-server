@@ -1,0 +1,54 @@
+{
+  "name": "SupportAgent",
+  "model": "yandexgpt",
+  "temperature": 0.3,
+  "max_tokens": 1500,
+  "system_prompt": "Ты — агент технической поддержки интернет-магазина «ТехноДом». Твоя задача — помогать клиентам решать проблемы с заказами.\n\nПравила:\n1. Отвечай вежливо, по делу, без воды\n2. Сначала уточни номер заказа или телефон клиента\n3. Если проблема известна — дай пошаговую инструкцию\n4. Если нужен возврат/обмен — собери: номер заказа, причину, фото (если брак)\n5. Если клиент агрессивен — сохраняй спокойствие, предложи соединение с оператором\n6. Не придумывай функции, которых нет в магазине\n7. Все созданные обращения фиксируй в CRM через инструменты",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "track_order",
+        "description": "Отследить заказ по номеру или телефону клиента",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": {"type": "string", "description": "Номер заказа (опционально)"},
+            "phone": {"type": "string", "description": "Телефон клиента (опционально)"}
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_support_ticket",
+        "description": "Создать обращение в техподдержку (задачу в CRM)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "client_name": {"type": "string"},
+            "client_phone": {"type": "string"},
+            "order_id": {"type": "string"},
+            "issue_description": {"type": "string"},
+            "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]}
+          },
+          "required": ["client_phone", "issue_description"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_return_policy",
+        "description": "Получить условия возврата для категории товара",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {"type": "string", "description": "Категория товара"}
+          }
+        }
+      }
+    }
+  ]
+}

@@ -8,7 +8,7 @@ version: 1.0.0
 
 ## Контекст
 
-Локальный MCP-сервер находится в `D:/MSP Servers/Yandex AI Studio MCP Server/server.py`. Он подключается к Hermes через stdio и предоставляет 13 инструментов для работы с Yandex Cloud AI Studio.
+Локальный MCP-сервер находится в `D:/MSP Servers/Yandex AI Studio MCP Server/server.py`. Он подключается к Hermes через stdio и предоставляет 21 инструмент для работы с Yandex Cloud AI Studio и CRM (amoCRM, Bitrix24, RetailCRM).
 
 Агент может:
 - Создавать AI-агентов под бизнес-задачи (поддержка, продажи, обработка заявок)
@@ -36,6 +36,14 @@ version: 1.0.0
 | `mcp_yandex_ai_studio_list_models` | Список моделей |
 | `mcp_yandex_ai_studio_create_search_index` | Создать поисковый индекс |
 | `mcp_yandex_ai_studio_search_in_index` | Поиск по индексу |
+| `mcp_yandex_ai_studio_create_amocrm_lead` | Создать сделку в amoCRM |
+| `mcp_yandex_ai_studio_find_amocrm_contact` | Найти контакт в amoCRM |
+| `mcp_yandex_ai_studio_create_amocrm_task` | Создать задачу в amoCRM |
+| `mcp_yandex_ai_studio_create_bitrix_lead` | Создать лид в Bitrix24 |
+| `mcp_yandex_ai_studio_create_bitrix_deal` | Создать сделку в Bitrix24 |
+| `mcp_yandex_ai_studio_search_bitrix_contacts` | Поиск контактов в Bitrix24 |
+| `mcp_yandex_ai_studio_create_retailcrm_order` | Создать заказ в RetailCRM |
+| `mcp_yandex_ai_studio_search_retailcrm_orders` | Найти заказы клиента в RetailCRM |
 
 ### Workflow создания агента
 
@@ -149,7 +157,7 @@ mcp_yandex_ai_studio_run_agent(
 Событие в CRM (новая заявка) → Webhook → Yandex Cloud Function → YandexGPT → ответ → CRM API (комментарий/задача)
 ```
 
-**Плюсы**:实时 реакция на события CRM
+**Плюсы**: реакция на события CRM в реальном времени
 **Минусы**: нужна облачная инфраструктура Yandex Cloud
 
 #### Паттерн C: Agent как прослойка (MCP-интеграция)
@@ -282,38 +290,22 @@ CRM Webhook → локальный Flask/FastAPI эндпоинт → MCP инс
 }
 ```
 
-### Реализация CRM-функций как MCP-инструментов
+### CRM-функции уже реализованы — они работают "из коробки"
 
-Для каждого метода CRM нужно реализовать Python-функцию и добавить её в MCP-сервер. Шаблон:
+Эти функции больше не шаблон — они реализованы в `crm_tools.py` и зарегистрированы в `server.py` как:
 
-```python
-import requests
+1. **Прямые MCP-инструменты** — `create_amocrm_lead`, `find_amocrm_contact`, `create_amocrm_task`,
+   `create_bitrix_lead`, `create_bitrix_deal`, `search_bitrix_contacts`,
+   `create_retailcrm_order`, `search_retailcrm_orders`. Любой агент может вызвать их напрямую.
+2. **Исполняемые function-calling инструменты внутри `run_agent`** — через `TOOL_REGISTRY` в
+   `server.py`. Если в `tools_config` агента есть инструмент с именем из реестра, `run_agent`
+   реально выполнит его (HTTP-запрос к CRM) и передаст результат модели — без участия MCP-хоста.
 
-def create_amocrm_lead(name: str, price: float = 0, contact_name: str = "",
-                       contact_phone: str = "", contact_email: str = "") -> dict:
-    """Создать сделку в amoCRM через REST API v4."""
-    token = os.getenv("AMOCRM_ACCESS_TOKEN")
-    subdomain = os.getenv("AMOCRM_SUBDOMAIN")
-    url = f"https://{subdomain}.amocrm.ru/api/v4/leads"
+Нужно только заполнить соответствующие переменные в `.env` (`AMOCRM_*`, `BITRIX24_WEBHOOK`,
+`RETAILCRM_*`) — без них вызов вернёт ошибку, но остальные инструменты сервера продолжат работать.
 
-    body = [{"name": name, "price": price}]
-    if contact_name or contact_phone or contact_email:
-        body[0]["_embedded"] = {
-            "contacts": [{
-                "first_name": contact_name,
-                "custom_fields_values": [
-                    {"field_code": "PHONE", "values": [{"value": contact_phone}]},
-                    {"field_code": "EMAIL", "values": [{"value": contact_email}]},
-                ]
-            }]
-        }
-
-    resp = requests.post(url, json=body, headers={
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    })
-    return resp.json()
-```
+Если нужен метод CRM, которого ещё нет в `crm_tools.py` — добавьте туда функцию по аналогии
+с существующими и зарегистрируйте её в `TOOL_REGISTRY` и как `@mcp.tool()` в `server.py`.
 
 ### Интеграция через Yandex Cloud Functions (Паттерн B)
 

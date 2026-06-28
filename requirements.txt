@@ -6,3 +6,6 @@ yandex-ai-studio-sdk>=0.20.0
 
 # Environment config
 python-dotenv>=1.0.0
+
+# CRM integrations (amoCRM, Bitrix24, RetailCRM)
+requests>=2.31.0

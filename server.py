@@ -43,6 +43,21 @@ from yandex_ai_studio_sdk import AIStudio
 
 from mcp.server.fastmcp import FastMCP
 
+import crm_tools
+
+# Реестр функций, которые run_agent может реально выполнить при function calling.
+# Имя в реестре должно совпадать с "name" в OpenAI-совместимой схеме инструмента.
+TOOL_REGISTRY = {
+    "create_amocrm_lead": crm_tools.create_amocrm_lead,
+    "find_amocrm_contact": crm_tools.find_amocrm_contact,
+    "create_amocrm_task": crm_tools.create_amocrm_task,
+    "create_bitrix_lead": crm_tools.create_bitrix_lead,
+    "create_bitrix_deal": crm_tools.create_bitrix_deal,
+    "search_bitrix_contacts": crm_tools.search_bitrix_contacts,
+    "create_retailcrm_order": crm_tools.create_retailcrm_order,
+    "search_retailcrm_orders": crm_tools.search_retailcrm_orders,
+}
+
 # --- Logging ---
 logging.basicConfig(
     level=logging.WARNING,
@@ -431,6 +446,7 @@ def list_models() -> str:
         "speech_voices": [
             "oksana", "jane", "omazh", "zahar", "ermil", "alena", "filipp",
         ],
+        "crm_tools": list(TOOL_REGISTRY.keys()),
     })
 
 
@@ -590,21 +606,36 @@ def run_agent(
                     "finish_reason": choice.finish_reason or "stop",
                 })
 
-            # Обрабатываем tool_calls — здесь агент запрашивает вызов инструментов
+            # Обрабатываем tool_calls — выполняем реальные функции из TOOL_REGISTRY
+            # (CRM-инструменты amoCRM/Bitrix24/RetailCRM). Неизвестные имена —
+            # значит инструмент должен быть выполнен на стороне MCP-хоста.
             tool_results = []
             for tc in msg.tool_calls:
+                fn_name = tc.function.name
+                try:
+                    fn_args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    fn_args = {}
+
+                fn = TOOL_REGISTRY.get(fn_name)
+                if fn is not None:
+                    try:
+                        content = fn(**fn_args)
+                    except Exception as tool_err:
+                        content = _safe_json({"error": str(tool_err), "type": type(tool_err).__name__})
+                else:
+                    content = _safe_json({
+                        "warning": f"Инструмент '{fn_name}' не зарегистрирован в TOOL_REGISTRY — "
+                                   "MCP-хост должен выполнить его самостоятельно.",
+                        "arguments": fn_args,
+                    })
+
                 tool_results.append({
                     "tool_call_id": tc.id,
                     "role": "tool",
-                    "content": _safe_json({
-                        "warning": f"Инструмент '{tc.function.name}' вызван, но MCP-хост должен выполнить его.",
-                        "arguments": tc.function.arguments,
-                    }),
+                    "content": content if isinstance(content, str) else _safe_json(content),
                 })
             history.extend(tool_results)
-
-            # Если мы просто проходим по шагам без реального выполнения инструментов,
-            # на следующей итерации агент получит предупреждения и может дать финальный ответ
 
         # Если достигнут лимит шагов
         return _safe_json({
@@ -719,6 +750,133 @@ def search_in_index(
                 })
 
         return _safe_json({"results": results, "query": query, "index_id": index_id})
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+# ============================================================
+#  CRM TOOLS — прямые "дешёвые" инструменты для amoCRM / Bitrix24 / RetailCRM
+#  Любой агент может вызвать их напрямую, без create_agent/run_agent.
+# ============================================================
+
+@mcp.tool()
+def create_amocrm_lead(
+    name: str,
+    price: float = 0,
+    pipeline_id: int = 0,
+    status_id: int = 0,
+    contact_name: str = "",
+    contact_phone: str = "",
+    contact_email: str = "",
+    tags: str = "",
+) -> str:
+    """Создать сделку в amoCRM (с опциональным контактом). Требует AMOCRM_SUBDOMAIN, AMOCRM_ACCESS_TOKEN в .env."""
+    try:
+        return crm_tools.create_amocrm_lead(
+            name=name, price=price, pipeline_id=pipeline_id, status_id=status_id,
+            contact_name=contact_name, contact_phone=contact_phone,
+            contact_email=contact_email, tags=tags,
+        )
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def find_amocrm_contact(query: str) -> str:
+    """Найти контакт в amoCRM по телефону или email. Требует AMOCRM_SUBDOMAIN, AMOCRM_ACCESS_TOKEN в .env."""
+    try:
+        return crm_tools.find_amocrm_contact(query)
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def create_amocrm_task(
+    lead_id: int,
+    text: str,
+    responsible_user_id: int = 0,
+    complete_till: str = "",
+) -> str:
+    """Создать задачу в amoCRM, привязанную к сделке. Требует AMOCRM_SUBDOMAIN, AMOCRM_ACCESS_TOKEN в .env."""
+    try:
+        return crm_tools.create_amocrm_task(
+            lead_id=lead_id, text=text,
+            responsible_user_id=responsible_user_id, complete_till=complete_till,
+        )
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def create_bitrix_lead(
+    title: str,
+    name: str = "",
+    phone: str = "",
+    email: str = "",
+    source_description: str = "",
+    comments: str = "",
+) -> str:
+    """Создать лид в Bitrix24 CRM. Требует BITRIX24_WEBHOOK в .env."""
+    try:
+        return crm_tools.create_bitrix_lead(
+            title=title, name=name, phone=phone, email=email,
+            source_description=source_description, comments=comments,
+        )
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def create_bitrix_deal(
+    title: str,
+    opportunity: float = 0,
+    contact_name: str = "",
+    contact_phone: str = "",
+    comments: str = "",
+) -> str:
+    """Создать сделку в Bitrix24 CRM (с опциональным контактом). Требует BITRIX24_WEBHOOK в .env."""
+    try:
+        return crm_tools.create_bitrix_deal(
+            title=title, opportunity=opportunity, contact_name=contact_name,
+            contact_phone=contact_phone, comments=comments,
+        )
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def search_bitrix_contacts(query: str) -> str:
+    """Поиск контактов в Bitrix24 по имени/телефону/email. Требует BITRIX24_WEBHOOK в .env."""
+    try:
+        return crm_tools.search_bitrix_contacts(query)
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def create_retailcrm_order(
+    customer_name: str = "",
+    customer_phone: str = "",
+    customer_email: str = "",
+    items: str = "[]",
+    total: float = 0,
+    source: str = "ai-agent",
+) -> str:
+    """Создать заказ в RetailCRM. Требует RETAILCRM_DOMAIN, RETAILCRM_API_KEY в .env."""
+    try:
+        return crm_tools.create_retailcrm_order(
+            customer_name=customer_name, customer_phone=customer_phone,
+            customer_email=customer_email, items=items, total=total, source=source,
+        )
+    except Exception as e:
+        return _safe_json({"error": str(e), "type": type(e).__name__})
+
+
+@mcp.tool()
+def search_retailcrm_orders(customer_phone: str) -> str:
+    """Найти заказы клиента в RetailCRM по телефону. Требует RETAILCRM_DOMAIN, RETAILCRM_API_KEY в .env."""
+    try:
+        return crm_tools.search_retailcrm_orders(customer_phone)
     except Exception as e:
         return _safe_json({"error": str(e), "type": type(e).__name__})
 
